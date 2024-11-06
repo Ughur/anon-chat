@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from 'react';
-import io, { Socket } from 'socket.io-client';
-import { useChatStore } from '@/lib/store';
-import { toast } from 'sonner';
+import { useEffect, useRef, useCallback } from "react";
+import io, { Socket } from "socket.io-client";
+import { useChatStore } from "@/lib/store";
+import { toast } from "sonner";
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001';
+const SOCKET_URL =
+  process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001";
 const RECONNECT_ATTEMPTS = 3;
 const RECONNECT_DELAY = 5000;
 
@@ -21,6 +22,7 @@ export const useChat = () => {
     connected,
     searching,
     selectedCountry,
+    replyingTo,
   } = useChatStore();
 
   const handleError = useCallback((error: string) => {
@@ -36,54 +38,69 @@ export const useChat = () => {
 
     const socket = socketRef.current;
 
-    socket.on('connect', () => {
-      console.log('Connected to server');
+    socket.on("connect", () => {
+      console.log("Connected to server");
       reconnectAttempts.current = 0;
     });
 
-    socket.on('connect_error', () => {
+    socket.on("connect_error", () => {
       reconnectAttempts.current++;
       if (reconnectAttempts.current >= RECONNECT_ATTEMPTS) {
-        handleError('Unable to connect to chat server. Please try again later.');
+        handleError(
+          "Unable to connect to chat server. Please try again later."
+        );
       }
     });
 
-    socket.on('error', handleError);
+    socket.on("error", handleError);
 
-    socket.on('matched', (partnerCountry: string) => {
+    socket.on("matched", (partnerCountry: string) => {
       setConnected(true);
       setSearching(false);
       addMessage({
         content: `You are now connected with a stranger${
-          partnerCountry !== 'global' ? ` from ${partnerCountry}` : ''
+          partnerCountry !== "global" ? ` from ${partnerCountry}` : ""
         }`,
-        sender: 'system',
+        sender: "system",
       });
     });
 
-    socket.on('message', (message: string) => {
-      addMessage({
-        content: message,
-        sender: 'stranger',
-      });
-    });
+    socket.on(
+      "message",
+      (message: {
+        content: string;
+        replyTo?: { content: string; sender: string };
+      }) => {
+        addMessage({
+          content: message.content,
+          sender: "stranger",
+          ...(message.replyTo && {
+            replyTo: {
+              id: Math.random().toString(36).substring(7),
+              content: message.replyTo.content,
+              sender: message.replyTo.sender as "user" | "stranger" | "system",
+            },
+          }),
+        });
+      }
+    );
 
-    socket.on('strangerDisconnected', () => {
+    socket.on("strangerDisconnected", () => {
       setConnected(false);
       addMessage({
-        content: 'Stranger has disconnected',
-        sender: 'system',
+        content: "Stranger has disconnected",
+        sender: "system",
       });
     });
 
-    socket.on('availableUsers', (users: Record<string, number>) => {
+    socket.on("availableUsers", (users: Record<string, number>) => {
       setAvailableUsers(users);
     });
 
-    socket.on('waiting', () => {
+    socket.on("waiting", () => {
       addMessage({
         content: `Waiting for someone to connect...`,
-        sender: 'system',
+        sender: "system",
       });
     });
 
@@ -97,28 +114,47 @@ export const useChat = () => {
     return cleanup;
   }, [setupSocket]);
 
-  const sendMessage = useCallback((message: string) => {
-    if (socketRef.current && connected) {
-      socketRef.current.emit('message', message);
-      addMessage({
-        content: message,
-        sender: 'user',
-      });
-    }
-  }, [connected, addMessage]);
+  const sendMessage = useCallback(
+    (message: string) => {
+      if (socketRef.current && connected) {
+        socketRef.current.emit("message", {
+          content: message,
+          ...(replyingTo && {
+            replyTo: {
+              content: replyingTo.content,
+              sender: replyingTo.sender,
+            },
+          }),
+        });
+
+        addMessage({
+          content: message,
+          sender: "user",
+          ...(replyingTo && {
+            replyTo: {
+              id: replyingTo.id,
+              content: replyingTo.content,
+              sender: replyingTo.sender,
+            },
+          }),
+        });
+      }
+    },
+    [connected, addMessage, replyingTo]
+  );
 
   const findNewChat = useCallback(() => {
     if (socketRef.current) {
       clearMessages();
       setSearching(true);
       setConnected(false);
-      socketRef.current.emit('findChat', { country: selectedCountry });
+      socketRef.current.emit("findChat", { country: selectedCountry });
     }
   }, [clearMessages, setSearching, setConnected, selectedCountry]);
 
   const disconnect = useCallback(() => {
     if (socketRef.current) {
-      socketRef.current.emit('disconnect');
+      socketRef.current.emit("disconnect");
       setConnected(false);
       clearMessages();
     }
