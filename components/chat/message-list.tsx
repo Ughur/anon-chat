@@ -125,7 +125,7 @@ export function MessageList() {
                       handleReply(message);
                     }}
                     className={cn(
-                      "absolute -left-10 top-1/2 -translate-y-1/2 rounded-full p-1.5 opacity-0 transition-opacity group-hover:opacity-100",
+                      "absolute -left-10 top-1/2 -translate-y-1/2 rounded-full p-1.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100",
                       message.sender === "user" && "-right-10 -left-auto"
                     )}
                   >
